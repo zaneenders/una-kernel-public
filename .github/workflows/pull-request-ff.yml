@@ -4,6 +4,7 @@ on:
     types: [opened, reopened, synchronize]
 jobs:
   check-fast-forward:
+    if: github.ref_name != 'swift' && github.head_ref != 'swift'
     runs-on: ubuntu-latest
 
     permissions:
