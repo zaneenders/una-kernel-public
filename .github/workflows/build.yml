@@ -34,13 +34,21 @@ jobs:
     runs-on: ubuntu-latest
     container: swift:6.4.2-noble
     steps:
+      - name: Install CMake and Ninja
+        run: |
+          find /etc/apt -type f \( -name '*.list' -o -name '*.sources' \) \
+            -exec sed -i 's#security\.ubuntu\.com/ubuntu#archive.ubuntu.com/ubuntu#g' {} +
+          apt-get update && apt-get install -y cmake ninja-build
+
       - name: Checkout
         uses: actions/checkout@v5
         with:
           persist-credentials: false
 
       - name: Compile Embedded Swift for Cortex-M33
-        run: Software/Utilities/Scripts/build-embedded-swift.sh
+        run: |
+          cmake --preset embedded-swift
+          cmake --build --preset embedded-swift
 
       - name: Upload Swift object
         uses: actions/upload-artifact@v4

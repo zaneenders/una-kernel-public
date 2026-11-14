@@ -1,15 +1,19 @@
 # CubeIDE includes this file from its generated configuration makefile.
-# Swift may be compiled on the host first; its ARM ELF object also links in
-# the Linux CubeIDE container. Native builds can invoke swiftc here directly.
+# CMake prepares the Swift object on the host or in CI before the Docker build.
+# Native CubeIDE builds can invoke the same CMake target directly.
 .DEFAULT_GOAL := all
 
+CMAKE ?= cmake
 SWIFT_SOURCES := $(wildcard ../Core/Swift/*.swift)
 SWIFT_OBJECT := ../.embedded-swift/UnaKernelSwift.o
-SWIFT_BUILD_SCRIPT := ../../../Utilities/Scripts/build-embedded-swift.sh
+SWIFT_CMAKE_MODULE := ../../../../cmake/EmbeddedSwift.cmake
+SWIFT_CMAKE_PROJECT := ../../../../CMakeLists.txt
+SWIFT_CMAKE_PRESETS := ../../../../CMakePresets.json
 USER_OBJS += $(SWIFT_OBJECT)
 # GCC's ARM unwind helpers have no GNU-stack note. State the stack policy
 # explicitly instead of inheriting an executable-stack request from them.
 LIBS += -Wl,-z,noexecstack
 
-$(SWIFT_OBJECT): $(SWIFT_SOURCES) $(SWIFT_BUILD_SCRIPT)
-	"$(SWIFT_BUILD_SCRIPT)" "$@"
+$(SWIFT_OBJECT): $(SWIFT_SOURCES) ../Core/Swift $(SWIFT_CMAKE_MODULE) $(SWIFT_CMAKE_PROJECT) $(SWIFT_CMAKE_PRESETS)
+	"$(CMAKE)" -S ../../../.. --preset embedded-swift
+	"$(CMAKE)" --build ../.embedded-swift --target embedded-swift

@@ -1,9 +1,17 @@
 cmake_minimum_required(VERSION 3.21)
-project(UnaWatch-Kernel LANGUAGES C CXX ASM)
+project(UnaWatch-Kernel LANGUAGES NONE)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(UNA_PROJECT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Software/App/UnaWatch-CubeIDE")
 set(UNA_SDK "${CMAKE_CURRENT_SOURCE_DIR}/SDK")
+
+include(cmake/EmbeddedSwift.cmake)
+option(UNA_SWIFT_ONLY "Configure only the Embedded Swift object target" OFF)
+if(UNA_SWIFT_ONLY)
+    una_add_embedded_swift(embedded-swift "${CMAKE_CURRENT_BINARY_DIR}/UnaKernelSwift.o")
+    return()
+endif()
+enable_language(C CXX ASM)
 
 # Prefer the project's optional Python environment for the firmware packer.
 if(NOT DEFINED Python3_EXECUTABLE AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/.venv/bin/python3")
@@ -59,27 +67,18 @@ endif()
 # A prepared ARM object can be supplied by CI. Otherwise CMake builds Swift
 # automatically, with its normal dependency tracking and clean behavior.
 set(UNA_SWIFT_OBJECT "" CACHE FILEPATH "Optional precompiled Embedded Swift ARM object")
-file(GLOB swift_sources CONFIGURE_DEPENDS "${UNA_PROJECT_DIR}/Core/Swift/*.swift")
 if(UNA_SWIFT_OBJECT STREQUAL "")
-    if(DEFINED ENV{SWIFTC} AND NOT DEFINED SWIFTC_EXECUTABLE)
-        set(SWIFTC_EXECUTABLE "$ENV{SWIFTC}" CACHE FILEPATH "Embedded Swift compiler")
-    endif()
-    find_program(SWIFTC_EXECUTABLE NAMES swiftc REQUIRED)
-    find_program(BASH_EXECUTABLE bash REQUIRED)
     set(UNA_SWIFT_OBJECT "${CMAKE_CURRENT_BINARY_DIR}/Swift/UnaKernelSwift.o")
-    add_custom_command(OUTPUT "${UNA_SWIFT_OBJECT}"
-        COMMAND "${CMAKE_COMMAND}" -E env "SWIFTC=${SWIFTC_EXECUTABLE}"
-            "${BASH_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Software/Utilities/Scripts/build-embedded-swift.sh"
-            "${UNA_SWIFT_OBJECT}" ${swift_sources}
-        DEPENDS ${swift_sources} "${CMAKE_CURRENT_SOURCE_DIR}/Software/Utilities/Scripts/build-embedded-swift.sh"
-        COMMENT "Compiling Embedded Swift for Cortex-M33" VERBATIM)
-    set_source_files_properties("${UNA_SWIFT_OBJECT}" PROPERTIES GENERATED TRUE)
+    una_add_embedded_swift(embedded-swift "${UNA_SWIFT_OBJECT}")
 elseif(NOT EXISTS "${UNA_SWIFT_OBJECT}")
     message(FATAL_ERROR "UNA_SWIFT_OBJECT does not exist: ${UNA_SWIFT_OBJECT}")
 endif()
 set_source_files_properties("${UNA_SWIFT_OBJECT}" PROPERTIES EXTERNAL_OBJECT TRUE)
 
 add_executable(UnaWatch-Kernel ${UNA_CUBE_SOURCES} "${UNA_SWIFT_OBJECT}")
+if(TARGET embedded-swift)
+    add_dependencies(UnaWatch-Kernel embedded-swift)
+endif()
 set_target_properties(UnaWatch-Kernel PROPERTIES SUFFIX ".elf"
     C_STANDARD 17 C_STANDARD_REQUIRED YES C_EXTENSIONS NO
     CXX_STANDARD 17 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS YES)

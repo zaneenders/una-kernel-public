@@ -42,7 +42,7 @@ Compiler versions affect the output. The release container uses GCC 13.3; the na
 
 ### CubeIDE container
 
-You need Docker, git, and a Swift compiler with Embedded Swift support (tested with Swift 6.4.2). Clone the repository with its submodule, at the release you want:
+You need Docker, git, CMake, Ninja, and a Swift compiler with Embedded Swift support (tested with Swift 6.4.2). Clone the repository with its submodule, at the release you want:
 
 ```bash
 git clone --recurse-submodules --branch v<version> https://github.com/UNAWatch/una-kernel-public.git
@@ -52,10 +52,11 @@ cd una-kernel-public
 First compile the Swift sources on your computer:
 
 ```bash
-Software/Utilities/Scripts/build-embedded-swift.sh
+cmake --preset embedded-swift
+cmake --build --preset embedded-swift
 ```
 
-This compiles `Software/App/UnaWatch-CubeIDE/Core/Swift/*.swift` into an ARM object file in the ignored `.embedded-swift/` directory. Set `SWIFTC=/path/to/swiftc` to choose a compiler. The target is Cortex-M33 with the firmware's hard-float calling convention and short-enum ABI. The initial Swift function is called from C++ at startup and logs `Embedded Swift: 20 + 22 = 42`.
+This Swift-only preset compiles `Software/App/UnaWatch-CubeIDE/Core/Swift/*.swift` into an ARM object file in the project's ignored `.embedded-swift/` directory. It needs only CMake, Ninja, and Swift; the C/C++ toolchain, SDK submodule, and Python packager are not needed for this step. Set `-DSWIFTC_EXECUTABLE=/path/to/swiftc` on the configure command to choose a compiler. The target is Cortex-M33 with the firmware's hard-float calling convention and short-enum ABI. The initial Swift function is called from C++ at startup and logs `Embedded Swift: 20 + 22 = 42`.
 
 Then build and link the firmware in the same CubeIDE container that UNA's releases use:
 
@@ -77,7 +78,9 @@ A build of a release tag produces the same `.ota` as that release.
 
 Add Swift files under `Software/App/UnaWatch-CubeIDE/Core/Swift/` and expose C-compatible functions with `@_cdecl`. Declare them in `Core/Inc/EmbeddedSwift.h` for calls from C or C++. The compiler uses whole-module optimization and `-no-allocations` to keep this initial integration allocation-free; unused code is removed by the firmware linker's section garbage collection.
 
-CubeIDE's `makefile.defs` adds the Swift object to the normal firmware link and rebuilds it when a Swift source or its build script changes. The stock CubeIDE Docker image has no Swift compiler, so rerun the host Swift command after Swift changes. Its output lives outside the configuration directory so it survives CubeIDE's automatic clean. A native CubeIDE build can run `swiftc` directly when it is on the build's `PATH`, or selected with `SWIFTC`. CI compiles the ARM object in a Swift container before passing it to the CubeIDE job.
+`cmake/EmbeddedSwift.cmake` owns the Swift compiler invocation and flags for both presets. The full `firmware` preset builds Swift automatically; the `embedded-swift` preset prepares just the object used by CubeIDE and CI.
+
+CubeIDE's `makefile.defs` adds this object to the normal firmware link and invokes CMake's `embedded-swift` target when Swift sources or CMake settings change. Native CubeIDE builds need CMake, Ninja, and Swift on `PATH`. The stock CubeIDE Docker image has no Swift compiler, so rerun the host Swift-only preset after Swift changes. Its output lives outside the configuration directory so it survives CubeIDE's automatic clean. CI uses the same Swift-only CMake preset in a Swift container before passing the object to the CubeIDE and CMake firmware jobs.
 
 ### Host unit tests
 
