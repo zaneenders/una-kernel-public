@@ -32,37 +32,8 @@ jobs:
       - name: Kernel sources are registered in .project
         run: python3 Software/Utilities/Scripts/check_project_links.py
 
-  embedded-swift:
-    if: github.ref_name != 'swift' && github.head_ref != 'swift'
-    runs-on: ubuntu-latest
-    container: swift:6.4.2-noble
-    steps:
-      - name: Install CMake and Ninja
-        run: |
-          find /etc/apt -type f \( -name '*.list' -o -name '*.sources' \) \
-            -exec sed -i 's#security\.ubuntu\.com/ubuntu#archive.ubuntu.com/ubuntu#g' {} +
-          apt-get update && apt-get install -y cmake ninja-build
-
-      - name: Checkout
-        uses: actions/checkout@v5
-        with:
-          persist-credentials: false
-
-      - name: Compile Embedded Swift for Cortex-M33
-        run: |
-          cmake --preset embedded-swift
-          cmake --build --preset embedded-swift
-
-      - name: Upload Swift object
-        uses: actions/upload-artifact@v4
-        with:
-          name: embedded-swift
-          include-hidden-files: true
-          path: Software/App/UnaWatch-CubeIDE/.embedded-swift/UnaKernelSwift.o
-
   firmware:
     if: github.ref_name != 'swift' && github.head_ref != 'swift'
-    needs: embedded-swift
     runs-on: ubuntu-latest
     container: xanderhendriks/stm32cubeide:16.0
     steps:
@@ -72,7 +43,12 @@ jobs:
           # carries the security pocket too
           find /etc/apt -type f \( -name '*.list' -o -name '*.sources' \) \
             -exec sed -i 's#security\.ubuntu\.com/ubuntu#archive.ubuntu.com/ubuntu#g' {} +
-          apt-get update && apt-get install -y git cmake ninja-build
+          apt-get update && apt-get install -y git cmake ninja-build curl libncurses6
+
+      - name: Install Swift
+        run: |
+          curl -fsSL https://download.swift.org/swift-6.4.2-release/ubuntu2404/swift-6.4.2-RELEASE/swift-6.4.2-RELEASE-ubuntu24.04.tar.gz | tar -xz -C /opt
+          echo "/opt/swift-6.4.2-RELEASE-ubuntu24.04/usr/bin" >> "$GITHUB_PATH"
 
       - name: Checkout
         uses: actions/checkout@v5
@@ -80,12 +56,6 @@ jobs:
           fetch-depth: 0
           submodules: recursive
           persist-credentials: false
-
-      - name: Download Swift object
-        uses: actions/download-artifact@v4
-        with:
-          name: embedded-swift
-          path: Software/App/UnaWatch-CubeIDE/.embedded-swift
 
       # actions/checkout re-fetches the tag as lightweight, and git describe
       # can then pick another tag on the same commit
@@ -103,8 +73,7 @@ jobs:
           arm-none-eabi-objcopy -O binary $OUT/UnaWatch-Kernel.elf $OUT/UnaWatch-Kernel-$BUILD_VERSION.bin
           arm-none-eabi-objcopy -O ihex $OUT/UnaWatch-Kernel.elf $OUT/UnaWatch-Kernel-$BUILD_VERSION.hex
           mv $OUT/UnaWatch-Kernel.elf $OUT/UnaWatch-Kernel-$BUILD_VERSION.elf
-          cmake --preset firmware \
-            -DUNA_SWIFT_OBJECT="$GITHUB_WORKSPACE/Software/App/UnaWatch-CubeIDE/.embedded-swift/UnaKernelSwift.o"
+          cmake --preset firmware
           cmake --build --preset firmware
 
       - name: Upload firmware
@@ -150,7 +119,6 @@ jobs:
       - name: Download the firmware
         uses: actions/download-artifact@v4
         with:
-          name: firmware
           path: artifacts
 
       - name: Release

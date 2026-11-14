@@ -29,8 +29,7 @@
     },
     {
       "name": "firmware",
-      "configurePreset": "firmware",
-      "jobs": 8
+      "configurePreset": "firmware"
     }
   ]
 }

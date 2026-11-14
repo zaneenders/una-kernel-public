@@ -6,4 +6,4 @@
 - Keep `.project` and `.cproject` authoritative for source selection and settings. Reuse the existing startup code, libraries, linker script, and firmware packer.
 - Keep the Swift compiler invocation in `cmake/EmbeddedSwift.cmake`, shared by the `firmware` and `embedded-swift` presets. Keep the initial Swift code allocation-free.
 - Avoid unrelated refactors, extra build systems, architecture support, or duplicate CI jobs. Preserve the existing CI skip for the exploratory `swift` branch.
-- Verify build changes with both CMake presets. When changing CI or precompiled Swift handling, also check the firmware preset with `UNA_SWIFT_OBJECT` set to the Swift-only preset's output.
+- Build Swift from source in CMake and CI; do not add a precompiled-object override. Verify build changes with both CMake presets.

@@ -1,17 +1,18 @@
 cmake_minimum_required(VERSION 3.21)
 project(UnaWatch-Kernel LANGUAGES NONE)
 
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(UNA_PROJECT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Software/App/UnaWatch-CubeIDE")
-set(UNA_SDK "${CMAKE_CURRENT_SOURCE_DIR}/SDK")
 
 include(cmake/EmbeddedSwift.cmake)
+set(swift_object "${CMAKE_CURRENT_BINARY_DIR}/UnaKernelSwift.o")
+una_add_embedded_swift(embedded-swift "${swift_object}")
 option(UNA_SWIFT_ONLY "Configure only the Embedded Swift object target" OFF)
 if(UNA_SWIFT_ONLY)
-    una_add_embedded_swift(embedded-swift "${CMAKE_CURRENT_BINARY_DIR}/UnaKernelSwift.o")
     return()
 endif()
 enable_language(C CXX ASM)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+set(UNA_SDK "${CMAKE_CURRENT_SOURCE_DIR}/SDK")
 
 # Prefer the project's optional Python environment for the firmware packer.
 if(NOT DEFINED Python3_EXECUTABLE AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/.venv/bin/python3")
@@ -50,11 +51,9 @@ if(BUILD_VERSION STREQUAL "")
     if(NOT version_match)
         message(FATAL_ERROR "Could not determine firmware version: ${version_log}")
     endif()
-    set(UNA_BUILD_VERSION "${CMAKE_MATCH_1}")
-else()
-    set(UNA_BUILD_VERSION "${BUILD_VERSION}")
+    set(BUILD_VERSION "${CMAKE_MATCH_1}")
 endif()
-message(STATUS "Firmware version: ${UNA_BUILD_VERSION}")
+message(STATUS "Firmware version: ${BUILD_VERSION}")
 
 set(UNA_CPU_FLAGS -mcpu=cortex-m33 -mthumb -mfpu=fpv5-sp-d16 -mfloat-abi=hard)
 execute_process(COMMAND "${CMAKE_C_COMPILER}" -print-file-name=standard_c_nano_cpp.specs
@@ -64,21 +63,8 @@ if(NOT EXISTS "${runtime_specs}")
     message(FATAL_ERROR "Use the GNU Tools for STM32 compiler from STM32CubeCLT or CubeIDE; standard_c_nano_cpp.specs was not found.")
 endif()
 
-# A prepared ARM object can be supplied by CI. Otherwise CMake builds Swift
-# automatically, with its normal dependency tracking and clean behavior.
-set(UNA_SWIFT_OBJECT "" CACHE FILEPATH "Optional precompiled Embedded Swift ARM object")
-if(UNA_SWIFT_OBJECT STREQUAL "")
-    set(UNA_SWIFT_OBJECT "${CMAKE_CURRENT_BINARY_DIR}/Swift/UnaKernelSwift.o")
-    una_add_embedded_swift(embedded-swift "${UNA_SWIFT_OBJECT}")
-elseif(NOT EXISTS "${UNA_SWIFT_OBJECT}")
-    message(FATAL_ERROR "UNA_SWIFT_OBJECT does not exist: ${UNA_SWIFT_OBJECT}")
-endif()
-set_source_files_properties("${UNA_SWIFT_OBJECT}" PROPERTIES EXTERNAL_OBJECT TRUE)
-
-add_executable(UnaWatch-Kernel ${UNA_CUBE_SOURCES} "${UNA_SWIFT_OBJECT}")
-if(TARGET embedded-swift)
-    add_dependencies(UnaWatch-Kernel embedded-swift)
-endif()
+set_source_files_properties("${swift_object}" PROPERTIES EXTERNAL_OBJECT TRUE)
+add_executable(UnaWatch-Kernel ${UNA_CUBE_SOURCES} "${swift_object}")
 set_target_properties(UnaWatch-Kernel PROPERTIES SUFFIX ".elf"
     C_STANDARD 17 C_STANDARD_REQUIRED YES C_EXTENSIONS NO
     CXX_STANDARD 17 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS YES)
@@ -90,7 +76,7 @@ target_compile_definitions(UnaWatch-Kernel PRIVATE
     "$<$<COMPILE_LANGUAGE:C>:${UNA_CUBE_C_DEFINES}>"
     "$<$<COMPILE_LANGUAGE:CXX>:${UNA_CUBE_CXX_DEFINES}>"
     "$<$<COMPILE_LANGUAGE:ASM>:DEBUG>"
-    "BUILD_VERSION=\"${UNA_BUILD_VERSION}\"" "PROJECT_NAME=\"UNA Watch\"")
+    "BUILD_VERSION=\"${BUILD_VERSION}\"" "PROJECT_NAME=\"UNA Watch\"")
 target_compile_options(UnaWatch-Kernel PRIVATE ${UNA_CPU_FLAGS} -g3
     "--specs=${runtime_specs}"
     "$<$<COMPILE_LANGUAGE:C,CXX>:-Os;-UNDEBUG;-ffunction-sections;-fdata-sections;-Wall;-fstack-usage;-fcyclomatic-complexity;-fmacro-prefix-map=${CMAKE_CURRENT_SOURCE_DIR}/=>"
@@ -105,7 +91,7 @@ target_link_directories(UnaWatch-Kernel PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/Software/Utilities/Scripts/linker")
 target_link_options(UnaWatch-Kernel PRIVATE ${UNA_CPU_FLAGS}
     "--specs=${runtime_specs}" "-T${linker_script}"
-    -static -nostartfiles -nodefaultlibs -nostdlib
+    -static -nostdlib
     "-Wl,-Map=${CMAKE_CURRENT_BINARY_DIR}/UnaWatch-Kernel.map"
     -Wl,--gc-sections -Wl,-z,noexecstack
     -Wl,--wrap=malloc -Wl,--wrap=_malloc_r -Wl,--wrap=_free_r)
@@ -118,16 +104,16 @@ set_property(TARGET UnaWatch-Kernel APPEND PROPERTY LINK_DEPENDS
 set(packed_images
     "${CMAKE_CURRENT_BINARY_DIR}/UnaWatch-Kernel.bin"
     "${CMAKE_CURRENT_BINARY_DIR}/UnaWatch-Kernel.hex"
-    "${CMAKE_CURRENT_BINARY_DIR}/Exe/UnaWatch-Kernel_${UNA_BUILD_VERSION}.hex"
-    "${CMAKE_CURRENT_BINARY_DIR}/Exe/UnaWatch-Kernel_${UNA_BUILD_VERSION}.ota"
-    "${CMAKE_CURRENT_BINARY_DIR}/Exe/UnaWatch-Kernel_${UNA_BUILD_VERSION}.gld")
+    "${CMAKE_CURRENT_BINARY_DIR}/Exe/UnaWatch-Kernel_${BUILD_VERSION}.hex"
+    "${CMAKE_CURRENT_BINARY_DIR}/Exe/UnaWatch-Kernel_${BUILD_VERSION}.ota"
+    "${CMAKE_CURRENT_BINARY_DIR}/Exe/UnaWatch-Kernel_${BUILD_VERSION}.gld")
 file(GLOB bootloader_images "${CMAKE_CURRENT_SOURCE_DIR}/una-bootloader/Exe/*.hex")
 file(GLOB libc_images "${CMAKE_CURRENT_SOURCE_DIR}/una-libs/Exe/*.hex")
 add_custom_command(OUTPUT ${packed_images}
     COMMAND "${CMAKE_OBJCOPY}" -O binary "$<TARGET_FILE:UnaWatch-Kernel>" "${CMAKE_CURRENT_BINARY_DIR}/UnaWatch-Kernel.bin"
     COMMAND "${CMAKE_OBJCOPY}" -O ihex "$<TARGET_FILE:UnaWatch-Kernel>" "${CMAKE_CURRENT_BINARY_DIR}/UnaWatch-Kernel.hex"
     COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Software/Utilities/Scripts/firmware_packer/post_build.py"
-        -n UnaWatch-Kernel -v "${UNA_BUILD_VERSION}" -d "${CMAKE_CURRENT_BINARY_DIR}"
+        -n UnaWatch-Kernel -v "${BUILD_VERSION}" -d "${CMAKE_CURRENT_BINARY_DIR}"
         -o "${CMAKE_CURRENT_BINARY_DIR}/Exe" -m 2
     COMMAND "${CMAKE_SIZE}" "$<TARGET_FILE:UnaWatch-Kernel>"
     DEPENDS UnaWatch-Kernel ${bootloader_images} ${libc_images}

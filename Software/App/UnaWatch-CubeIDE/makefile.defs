@@ -1,6 +1,5 @@
 # CubeIDE includes this file from its generated configuration makefile.
-# CMake prepares the Swift object on the host or in CI before the Docker build.
-# Native CubeIDE builds can invoke the same CMake target directly.
+# CMake builds Swift from source; stock containers need a host-built object.
 .DEFAULT_GOAL := all
 
 CMAKE ?= cmake
