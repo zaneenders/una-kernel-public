@@ -1,0 +1,15 @@
+# CubeIDE includes this file from its generated configuration makefile.
+# Swift may be compiled on the host first; its ARM ELF object also links in
+# the Linux CubeIDE container. Native builds can invoke swiftc here directly.
+.DEFAULT_GOAL := all
+
+SWIFT_SOURCES := $(wildcard ../Core/Swift/*.swift)
+SWIFT_OBJECT := ../.embedded-swift/UnaKernelSwift.o
+SWIFT_BUILD_SCRIPT := ../../../Utilities/Scripts/build-embedded-swift.sh
+USER_OBJS += $(SWIFT_OBJECT)
+# GCC's ARM unwind helpers have no GNU-stack note. State the stack policy
+# explicitly instead of inheriting an executable-stack request from them.
+LIBS += -Wl,-z,noexecstack
+
+$(SWIFT_OBJECT): $(SWIFT_SOURCES) $(SWIFT_BUILD_SCRIPT)
+	"$(SWIFT_BUILD_SCRIPT)" "$@"

@@ -1,7 +1,10 @@
 # Build output
 /Exe/
+/build-cmake/
+/.venv/
 **/Debug-STM32U5A5/
 **/Release/
+**/.embedded-swift/
 .metadata
 .headless-build
 .headless-ws/
