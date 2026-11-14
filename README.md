@@ -20,25 +20,18 @@ The `.ota` and `.gld` files are encrypted with the key in `una-bootloader/Softwa
 
 The firmware also builds with CMake and Ninja, including Embedded Swift, without launching CubeIDE or Docker. Install the GNU Tools for STM32 from STM32CubeCLT, CMake 3.21 or newer, Ninja, Python 3, and a Swift compiler with Embedded support (tested with Swift 6.4.2). Put their executables on `PATH` and initialize the SDK with `git submodule update --init --recursive`.
 
-Set up the firmware packer's Python dependency once:
+Set up the firmware packer's Python dependency, then build:
 
 ```bash
 python3 -m venv .venv
 .venv/bin/python -m pip install -r cmake/requirements.txt
-```
-
-Then configure and build:
-
-```bash
 cmake --preset firmware
 cmake --build --preset firmware
 ```
 
 CMake compiles the Swift files automatically, links the firmware, and writes the `.ota`, `.gld`, and combined `.hex` files to `build-cmake/Exe/`. The kernel-only `.elf`, `.bin`, `.hex`, and link map are in `build-cmake/`. Override the version with `cmake --preset firmware -DBUILD_VERSION=<version>`, or select a Python environment with `-DPython3_EXECUTABLE=/path/to/python3` and a Swift compiler with `-DSWIFTC_EXECUTABLE=/path/to/swiftc`.
 
-The CMake build reads the checked-in CubeIDE `.project` and `.cproject` files to preserve the same 848 source files, exclusions, include paths, definitions, and per-file optimization settings. It reuses the startup code, HAL, FreeRTOS, TouchGFX/vendor libraries, linker script, and firmware packer. CubeIDE itself is not a build dependency. The imported configuration is `Debug-STM32U5A5`, which retains assertions and debug information while optimizing most code for size.
-
-Compiler versions affect the output. The release container uses GCC 13.3; the native build has also been tested with STM32CubeCLT's GCC 14.3. A native build with a different compiler is not expected to reproduce release firmware byte for byte. CI checks CMake with the release C/C++ toolchain as well.
+CMake imports the `Debug-STM32U5A5` sources and settings from CubeIDE's `.project` and `.cproject` files and reuses the existing linker script and firmware packer. The target is the STM32U5A5's ARM Cortex-M33. CI builds both CubeIDE and CMake with the release C/C++ toolchain; other compiler versions can produce different firmware bytes.
 
 ### CubeIDE container
 
@@ -56,7 +49,7 @@ cmake --preset embedded-swift
 cmake --build --preset embedded-swift
 ```
 
-This Swift-only preset compiles `Software/App/UnaWatch-CubeIDE/Core/Swift/*.swift` into an ARM object file in the project's ignored `.embedded-swift/` directory. It needs only CMake, Ninja, and Swift; the C/C++ toolchain, SDK submodule, and Python packager are not needed for this step. Set `-DSWIFTC_EXECUTABLE=/path/to/swiftc` on the configure command to choose a compiler. The target is Cortex-M33 with the firmware's hard-float calling convention and short-enum ABI. The initial Swift function is called from C++ at startup and logs `Embedded Swift: 20 + 22 = 42`.
+This preset needs only CMake, Ninja, and Swift. It writes the ARM object to `Software/App/UnaWatch-CubeIDE/.embedded-swift/`, where it survives CubeIDE's clean. Rerun it after Swift changes; the stock CubeIDE container has no Swift compiler.
 
 Then build and link the firmware in the same CubeIDE container that UNA's releases use:
 
@@ -76,11 +69,9 @@ A build of a release tag produces the same `.ota` as that release.
 
 ### Embedded Swift
 
-Add Swift files under `Software/App/UnaWatch-CubeIDE/Core/Swift/` and expose C-compatible functions with `@_cdecl`. Declare them in `Core/Inc/EmbeddedSwift.h` for calls from C or C++. The compiler uses whole-module optimization and `-no-allocations` to keep this initial integration allocation-free; unused code is removed by the firmware linker's section garbage collection.
+Add Swift files under `Software/App/UnaWatch-CubeIDE/Core/Swift/`, export C-compatible functions with `@_cdecl`, and declare them in `Core/Inc/EmbeddedSwift.h`. The startup example logs `Embedded Swift: 20 + 22 = 42`.
 
-`cmake/EmbeddedSwift.cmake` owns the Swift compiler invocation and flags for both presets. The full `firmware` preset builds Swift automatically; the `embedded-swift` preset prepares just the object used by CubeIDE and CI.
-
-CubeIDE's `makefile.defs` adds this object to the normal firmware link and invokes CMake's `embedded-swift` target when Swift sources or CMake settings change. Native CubeIDE builds need CMake, Ninja, and Swift on `PATH`. The stock CubeIDE Docker image has no Swift compiler, so rerun the host Swift-only preset after Swift changes. Its output lives outside the configuration directory so it survives CubeIDE's automatic clean. CI uses the same Swift-only CMake preset in a Swift container before passing the object to the CubeIDE and CMake firmware jobs.
+`cmake/EmbeddedSwift.cmake` owns the shared compiler invocation: Embedded mode, whole-module optimization, no allocations, and the Cortex-M33 hard-float and short-enum ABI. The `firmware` preset builds Swift automatically. CubeIDE's `makefile.defs` links the Swift object and invokes the `embedded-swift` preset when rebuilding it locally, requiring CMake, Ninja, and Swift on `PATH`.
 
 ### Host unit tests
 

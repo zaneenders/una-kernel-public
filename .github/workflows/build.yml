@@ -66,13 +66,13 @@ jobs:
     runs-on: ubuntu-latest
     container: xanderhendriks/stm32cubeide:16.0
     steps:
-      - name: Install git
+      - name: Install build tools
         run: |
           # security.ubuntu.com has outages that hang apt; the main archive
           # carries the security pocket too
           find /etc/apt -type f \( -name '*.list' -o -name '*.sources' \) \
             -exec sed -i 's#security\.ubuntu\.com/ubuntu#archive.ubuntu.com/ubuntu#g' {} +
-          apt-get update && apt-get install -y git
+          apt-get update && apt-get install -y git cmake ninja-build
 
       - name: Checkout
         uses: actions/checkout@v5
@@ -103,6 +103,9 @@ jobs:
           arm-none-eabi-objcopy -O binary $OUT/UnaWatch-Kernel.elf $OUT/UnaWatch-Kernel-$BUILD_VERSION.bin
           arm-none-eabi-objcopy -O ihex $OUT/UnaWatch-Kernel.elf $OUT/UnaWatch-Kernel-$BUILD_VERSION.hex
           mv $OUT/UnaWatch-Kernel.elf $OUT/UnaWatch-Kernel-$BUILD_VERSION.elf
+          cmake --preset firmware \
+            -DUNA_SWIFT_OBJECT="$GITHUB_WORKSPACE/Software/App/UnaWatch-CubeIDE/.embedded-swift/UnaKernelSwift.o"
+          cmake --build --preset firmware
 
       - name: Upload firmware
         uses: actions/upload-artifact@v4
@@ -115,40 +118,6 @@ jobs:
             Exe/*.hex
             Exe/*.ota
             Exe/*.gld
-
-  cmake-firmware:
-    if: github.ref_name != 'swift' && github.head_ref != 'swift'
-    needs: embedded-swift
-    runs-on: ubuntu-latest
-    container: xanderhendriks/stm32cubeide:16.0
-    steps:
-      - name: Install build tools
-        run: |
-          find /etc/apt -type f \( -name '*.list' -o -name '*.sources' \) \
-            -exec sed -i 's#security\.ubuntu\.com/ubuntu#archive.ubuntu.com/ubuntu#g' {} +
-          apt-get update
-          apt-get install -y git cmake ninja-build python3 python3-bincopy
-
-      - name: Checkout
-        uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-          submodules: recursive
-          persist-credentials: false
-
-      - name: Download Swift object
-        uses: actions/download-artifact@v4
-        with:
-          name: embedded-swift
-          path: Software/App/UnaWatch-CubeIDE/.embedded-swift
-
-      - name: Build with CMake and the release C/C++ toolchain
-        run: |
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          export PATH="$(find /opt/st -name arm-none-eabi-gcc -type f | head -n 1 | xargs dirname):$PATH"
-          cmake --preset firmware \
-            -DUNA_SWIFT_OBJECT="$GITHUB_WORKSPACE/Software/App/UnaWatch-CubeIDE/.embedded-swift/UnaKernelSwift.o"
-          cmake --build --preset firmware
 
   host-tests:
     if: github.ref_name != 'swift' && github.head_ref != 'swift'
@@ -169,7 +138,7 @@ jobs:
 
   release:
     runs-on: ubuntu-latest
-    needs: [ project-links, firmware, cmake-firmware, host-tests ]
+    needs: [ project-links, firmware, host-tests ]
     if: github.ref_type == 'tag' && github.ref_name != 'swift' && github.head_ref != 'swift'
     permissions:
       contents: write
