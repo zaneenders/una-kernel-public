@@ -16,17 +16,45 @@ The `.ota` and `.gld` files are encrypted with the key in `una-bootloader/Softwa
 
 ## Building
 
-You need Docker and git. Clone the repository with its submodule, at the release you want:
+### CMake on macOS or Linux
+
+The firmware also builds with CMake and Ninja, including Embedded Swift, without launching CubeIDE or Docker. Install the GNU Tools for STM32 from STM32CubeCLT, CMake 3.21 or newer, Ninja, Python 3, and a Swift compiler with Embedded support (tested with Swift 6.4.2). Put their executables on `PATH` and initialize the SDK with `git submodule update --init --recursive`.
+
+Set up the firmware packer's Python dependency, then build:
+
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install -r cmake/requirements.txt
+cmake --preset firmware
+cmake --build --preset firmware
+```
+
+CMake compiles the Swift files automatically, links the firmware, and writes the `.ota`, `.gld`, and combined `.hex` files to `build-cmake/Exe/`. The kernel-only `.elf`, `.bin`, `.hex`, and link map are in `build-cmake/`. Override the version with `cmake --preset firmware -DBUILD_VERSION=<version>`, or select a Python environment with `-DPython3_EXECUTABLE=/path/to/python3` and a Swift compiler with `-DSWIFTC_EXECUTABLE=/path/to/swiftc`.
+
+CMake imports the `Debug-STM32U5A5` sources and settings from CubeIDE's `.project` and `.cproject` files and reuses the existing linker script and firmware packer. The target is the STM32U5A5's ARM Cortex-M33. CI builds both CubeIDE and CMake with the release C/C++ toolchain; other compiler versions can produce different firmware bytes.
+
+### CubeIDE container
+
+You need Docker, git, CMake, Ninja, and a Swift compiler with Embedded Swift support (tested with Swift 6.4.2). Clone the repository with its submodule, at the release you want:
 
 ```bash
 git clone --recurse-submodules --branch v<version> https://github.com/UNAWatch/una-kernel-public.git
 cd una-kernel-public
 ```
 
-Then build it in the same container that UNA's releases are built in:
+First compile the Swift sources on your computer:
 
 ```bash
-docker run --rm -v "$PWD:/workspace" xanderhendriks/stm32cubeide:16.0 bash -c \
+cmake --preset embedded-swift
+cmake --build --preset embedded-swift
+```
+
+This preset needs only CMake, Ninja, and Swift. It writes the ARM object to `Software/App/UnaWatch-CubeIDE/.embedded-swift/`, where it survives CubeIDE's clean. Rerun it after Swift changes; the stock CubeIDE container has no Swift compiler.
+
+Then build and link the firmware in the same CubeIDE container that UNA's releases use:
+
+```bash
+docker run --rm --platform linux/amd64 -v "$PWD:/workspace" xanderhendriks/stm32cubeide:16.0 bash -c \
     'git config --global --add safe.directory /workspace && \
      . /workspace/SDK/Utilities/Scripts/build-cube/find-cube.sh && \
      . /workspace/SDK/Utilities/Scripts/build-cube/una-version.sh \
@@ -38,6 +66,12 @@ docker run --rm -v "$PWD:/workspace" xanderhendriks/stm32cubeide:16.0 bash -c \
 The files above are written to `Exe/`. The version comes from the release tag that is checked out. After a commit of your own, it is that tag followed by your commit's hash, and `-dirty` if you have uncommitted changes. The build writes the version into `Software/App/UnaWatch-CubeIDE/.settings/org.eclipse.cdt.core.prefs`, which itself counts as a change; restore it with `git checkout -- Software/App/UnaWatch-CubeIDE/.settings` before building again. To set the version yourself, add `-e BUILD_VERSION=<version>` to `docker run`.
 
 A build of a release tag produces the same `.ota` as that release.
+
+### Embedded Swift
+
+Add Swift files under `Software/App/UnaWatch-CubeIDE/Core/Swift/`, export C-compatible functions with `@_cdecl`, and declare them in `Core/Inc/EmbeddedSwift.h`. The startup example logs `Embedded Swift: 20 + 22 = 42`.
+
+`cmake/EmbeddedSwift.cmake` owns the shared compiler invocation: Embedded mode, whole-module optimization, no allocations, and the Cortex-M33 hard-float and short-enum ABI. The `firmware` preset builds Swift automatically. CubeIDE's `makefile.defs` links the Swift object and invokes the `embedded-swift` preset when rebuilding it locally, requiring CMake, Ninja, and Swift on `PATH`.
 
 ### Host unit tests
 

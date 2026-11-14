@@ -1,0 +1,18 @@
+# CubeIDE includes this file from its generated configuration makefile.
+# CMake builds Swift from source; stock containers need a host-built object.
+.DEFAULT_GOAL := all
+
+CMAKE ?= cmake
+SWIFT_SOURCES := $(wildcard ../Core/Swift/*.swift)
+SWIFT_OBJECT := ../.embedded-swift/UnaKernelSwift.o
+SWIFT_CMAKE_MODULE := ../../../../cmake/EmbeddedSwift.cmake
+SWIFT_CMAKE_PROJECT := ../../../../CMakeLists.txt
+SWIFT_CMAKE_PRESETS := ../../../../CMakePresets.json
+USER_OBJS += $(SWIFT_OBJECT)
+# GCC's ARM unwind helpers have no GNU-stack note. State the stack policy
+# explicitly instead of inheriting an executable-stack request from them.
+LIBS += -Wl,-z,noexecstack
+
+$(SWIFT_OBJECT): $(SWIFT_SOURCES) ../Core/Swift $(SWIFT_CMAKE_MODULE) $(SWIFT_CMAKE_PROJECT) $(SWIFT_CMAKE_PRESETS)
+	"$(CMAKE)" -S ../../../.. --preset embedded-swift
+	"$(CMAKE)" --build ../.embedded-swift --target embedded-swift

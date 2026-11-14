@@ -8,6 +8,7 @@
  */
 
 #include "main.h"
+#include "EmbeddedSwift.h"
 
 #define LOG_MODULE_PRX      "main"
 #define LOG_MODULE_LEVEL    LOG_LEVEL_DEBUG
@@ -180,6 +181,7 @@ int main(void)
     LOG_INFO_WP("\n");
     LOG_INFO("%s FW: %s\n", Driver::System::GetProjectName(),
                             Driver::System::GetBuildVersionStr());
+    LOG_INFO("Embedded Swift: 20 + 22 = %u\n", una_swift_add(20, 22));
     Driver::System::LogResetInfo();
 
     LOG_DEBUG("Core clock: %u\n", SystemCoreClock);

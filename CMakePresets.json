@@ -1,0 +1,35 @@
+{
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "embedded-swift",
+      "displayName": "Embedded Swift object for CubeIDE and CI",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/Software/App/UnaWatch-CubeIDE/.embedded-swift",
+      "cacheVariables": {
+        "UNA_SWIFT_ONLY": "ON"
+      }
+    },
+    {
+      "name": "firmware",
+      "displayName": "UNA Watch firmware (C, C++, Embedded Swift)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build-cmake",
+      "toolchainFile": "${sourceDir}/cmake/arm-none-eabi.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "embedded-swift",
+      "configurePreset": "embedded-swift",
+      "targets": ["embedded-swift"]
+    },
+    {
+      "name": "firmware",
+      "configurePreset": "firmware"
+    }
+  ]
+}
